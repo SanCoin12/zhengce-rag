@@ -3,7 +3,7 @@ import json
 import sys
 from pathlib import Path
 
-import fitz  # PyMuPDF
+import pymupdf as fitz  # PyMuPDF（新版写法，老名字 fitz 已弃用）
 
 
 def parse_pdf(pdf_path: str) -> list[dict]:
