@@ -30,27 +30,29 @@ def clean_text(text):
             keep.append(s)
     return "\n".join(keep), removed
 
-data = json.load(open("data/parsed/one.json", encoding="utf-8"))
-pages = data if isinstance(data, list) else data.get("pages", [])
 
-out, removed_all = [], []
-before = after = 0
-for p in pages:
-    before += len(p["text"])
-    cleaned, removed = clean_text(p["text"])
-    removed_all += removed
-    after += len(cleaned)
-    if cleaned:
-        out.append({"file": p["file"], "page": p["page"], "text": cleaned})
+if __name__ == "__main__":
+    data = json.load(open("data/parsed/one.json", encoding="utf-8"))
+    pages = data if isinstance(data, list) else data.get("pages", [])
 
-doc_no = re.search(r"[A-Z]{2,}\d*-\d{4}-\d+", pages[0]["text"])
+    out, removed_all = [], []
+    before = after = 0
+    for p in pages:
+        before += len(p["text"])
+        cleaned, removed = clean_text(p["text"])
+        removed_all += removed
+        after += len(cleaned)
+        if cleaned:
+            out.append({"file": p["file"], "page": p["page"], "text": cleaned})
 
-print("清洗前 %d / 清洗后 %d / 削减率 %.1f%%" % (before, after, 100*(1-after/before)))
-print("共删 %d 行，样例：" % len(removed_all))
-for r in removed_all[:10]:
-    print("  [删]", r)
-print("政策编号：", doc_no.group() if doc_no else "没抓到")
+    doc_no = re.search(r"[A-Z]{2,}\d*-\d{4}-\d+", pages[0]["text"])
 
-json.dump({"file": out[0]["file"], "doc_no": doc_no.group() if doc_no else None, "pages": out},
-          open("data/parsed/one_clean.json", "w", encoding="utf-8"),
-          ensure_ascii=False, indent=2)
+    print("清洗前 %d / 清洗后 %d / 削减率 %.1f%%" % (before, after, 100*(1-after/before)))
+    print("共删 %d 行，样例：" % len(removed_all))
+    for r in removed_all[:10]:
+        print("  [删]", r)
+    print("政策编号：", doc_no.group() if doc_no else "没抓到")
+
+    json.dump({"file": out[0]["file"], "doc_no": doc_no.group() if doc_no else None, "pages": out},
+            open("data/parsed/one_clean.json", "w", encoding="utf-8"),
+            ensure_ascii=False, indent=2)
