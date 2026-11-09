@@ -2,18 +2,31 @@ from pathlib import Path
 import json
 from parse_pdf import parse_pdf
 from clean import clean_text
+from parse_docx import parse_docx
 import re
 DOCS = re.compile(r"[A-Z]{2,6}[A-Z0-9]*-\d{4}-\d{3,}|[\u4e00-\u9fa5]{1,12}〔\d{4}〕\s*\d+\s*号")
 
 raw_dir, out_dir = Path("data/raw"), Path("data/parsed")
 out_dir.mkdir(parents=True, exist_ok=True)
-pdfs = sorted(p for p in raw_dir.iterdir() if p.suffix.lower() == ".pdf")
-print(f"找到 {len(pdfs)} 份 PDF")
+files = sorted(p for p in raw_dir.iterdir() if p.suffix.lower() in (".pdf", ".docx"))
+print(f"找到 {len(files)} 份文件")
 
 
 ok, failed = [], []
-for pdf in pdfs:
+for pdf in files:
     try:
+        if pdf.suffix.lower() == ".docx":
+            paras = parse_docx(pdf)
+            doc_no = ""
+            for r in paras:
+                if DOCS.fullmatch(r["text"].strip()):
+                    doc_no = r["text"].strip()
+                    break
+            out = out_dir / (pdf.stem + ".json")
+            out.write_text(json.dumps({"file": pdf.name, "doc_no": doc_no, "pages": paras}, ensure_ascii=False, indent=2), encoding="utf-8")
+            print(f"OK {pdf.name}: docx {len(paras)}段 doc_no={doc_no or '—'}")
+            ok.append(pdf.name)
+            continue
         doc_no = None
         pages = parse_pdf(pdf)
         cleaned = []
@@ -42,6 +55,5 @@ for pdf in pdfs:
     except Exception as e:
         failed.append((pdf.name, repr(e)))
 
-print(f"成功率 {len(ok)}/{len(pdfs)}")
-out_dir.joinpath("failed_list.txt").write_text(
-"\n".join(f"{n} {e}" for n, e in failed), encoding="utf-8")
+print(f"成功率 {len(ok)}/{len(files)}")
+out_dir.joinpath("failed_list.txt").write_text("\n".join(f"{n} {e}" for n, e in failed), encoding="utf-8")
