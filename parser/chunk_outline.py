@@ -6,19 +6,19 @@ RE_NUM = re.compile(r'^\d+[、\.]')
 WRITE = '--write' in sys.argv
 
 old = json.load(open('data/chunks_v0.json', encoding='utf-8'))
-done = set(c['file'] for c in old)
+done = set(c['file'] for c in old) # 已处理好的
 new_chunks = []
 for f in sorted(glob.glob('data/parsed/*.json')):
     doc = json.load(open(f, encoding='utf-8'))
     title = os.path.basename(f)[:-5]
     if title in done:
         continue
-    full = '\n'.join((p.get('text') or '') for p in doc.get('pages', []))
-    lines = [l.strip() for l in full.split('\n')]
+    full = '\n'.join((p.get('text') or '') for p in doc.get('pages', [])) # 跨页拼接
+    lines = [l.strip() for l in full.split('\n')] # 段落切割
     sec_idx = [i for i, l in enumerate(lines) if RE_SEC.match(l)]
     if not sec_idx:
         print('!! 无大项结构,跳过:', title[:30]); continue
-    if sec_idx[0] > 0 and len(''.join(lines[:sec_idx[0]])) > 50:
+    if sec_idx[0] > 0 and len(''.join(lines[:sec_idx[0]])) > 50: # 第一个刀口之前有没有东西
         new_chunks.append({'file': title, 'doc_no': doc.get('doc_no', ''), 'chapter': '', 'clause': '', 'type': 'preamble', 'text': '\n'.join(lines[:sec_idx[0]])})
     bounds = sec_idx + [len(lines)]
     for a, b in zip(bounds, bounds[1:]):
@@ -45,7 +45,9 @@ for f in sorted(glob.glob('data/parsed/*.json')):
                 new_chunks.append({'file': title, 'doc_no': doc.get('doc_no', ''), 'chapter': chapter, 'clause': clause, 'type': 'section', 'text': '\n'.join(blk)})
 
 print(f'新增 {len(new_chunks)} 块;各文件块数:')
+
 from collections import Counter
+
 for k, v in Counter(c['file'][:20] for c in new_chunks).items(): print(' ', v, k)
 mx = max(new_chunks, key=lambda c: len(c['text'])) if new_chunks else None
 if mx: print('最大块字数:', len(mx['text']), mx['file'][:20], mx['clause'])
