@@ -2,7 +2,7 @@ from pathlib import Path
 import json
 from parse_pdf import parse_pdf
 from clean import clean_text
-from parse_docx import parse_docx
+from parse_docx import parse_docx, denoise_docx
 import re
 DOCS = re.compile(r"[A-Z]{2,6}[A-Z0-9]*-\d{4}-\d{3,}|[\u4e00-\u9fa5]{1,12}〔\d{4}〕\s*\d+\s*号")
 
@@ -22,9 +22,10 @@ for pdf in files:
                 if DOCS.fullmatch(r["text"].strip()):
                     doc_no = r["text"].strip()
                     break
+            kept, deleted, issued = denoise_docx(paras) # 降噪
             out = out_dir / (pdf.stem + ".json")
-            out.write_text(json.dumps({"file": pdf.name, "doc_no": doc_no, "pages": paras}, ensure_ascii=False, indent=2), encoding="utf-8")
-            print(f"OK {pdf.name}: docx {len(paras)}段 doc_no={doc_no or '—'}")
+            out.write_text(json.dumps({"file": pdf.name, "doc_no": doc_no, "issued_date": issued, "pages": kept}, ensure_ascii=False, indent=2), encoding="utf-8")
+            print(f"OK {pdf.name}: docx {len(kept)}段(删{len(deleted)}) doc_no={doc_no or '—'} issued={issued or '—'} 删除审计: {[k for k, _ in deleted]}")
             ok.append(pdf.name)
             continue
         doc_no = None
