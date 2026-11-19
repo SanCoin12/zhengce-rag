@@ -1,6 +1,8 @@
-import json, os
+import json, os, sys
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "search"))
 import numpy as np
 from openai import OpenAI
+from exact import exact_search
 
 client = OpenAI(api_key=os.environ["ZHIPUAI_API_KEY"],
                 base_url="https://open.bigmodel.cn/api/paas/v4/")
@@ -23,17 +25,23 @@ def build_prompt(question, hits):
         {"role": "user", "content": f"检索到的条款：\n{ctx}\n\n问题：{question}"}]
 
 def ask(question, k=5):
-    hits = retrieve(question, k)
-    resp = client.chat.completions.create(model="glm-4-flash",
-        messages=build_prompt(question, hits), temperature=0.1, max_tokens=500)
-    return resp.choices[0].message.content, hits
+    no, exact_hits = exact_search(question, chunks)
+    if no and exact_hits:
+        hits = [(1.0, c) for c in exact_hits]
+        route = f"精确({len(exact_hits)}块)"
+    else:
+        hits = retrieve(question, k)
+        route = "向量"
+    resp = client.chat.completions.create(model="glm-4-flash", messages=build_prompt(question, hits), temperature=0.1, max_tokens=500)
+    return resp.choices[0].message.content, hits, route
 
 if __name__ == "__main__":
     while True:
         q = input("问（q 退出）: ")
         if q.strip().lower() in ("q", "quit", "exit", ""):
             break
-        ans, hits = ask(q)
+        ans, hits, route = ask(q)
+        print("路:", route)
         for rank, (s, c) in enumerate(hits, 1):
             print(f"{rank}. [{s:.3f}] {c['doc_no']} {c['clause'] or '前言'}")
         print(f"\n答：{ans}\n")
