@@ -3,6 +3,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
 import numpy as np
 from openai import OpenAI
 from exact import exact_search
+from bm25 import build_index, search as bm25_search
+from rrf import rrf_fuse
 
 client = OpenAI(api_key=os.environ["ZHIPUAI_API_KEY"],
                 base_url="https://open.bigmodel.cn/api/paas/v4/")
@@ -10,6 +12,8 @@ client = OpenAI(api_key=os.environ["ZHIPUAI_API_KEY"],
 chunks = json.load(open("data/chunks_v0.json", encoding="utf-8"))
 store = np.load("data/vec_store_v0.npz")["vectors"]
 print(f"弹药库就位: {store.shape[0]} 条 / {store.shape[1]} 维")
+bm25 = build_index(chunks)
+print(f"BM25 索引就位: {len(chunks)} 块")
 
 def retrieve(question, k=5):
     qv = np.array(client.embeddings.create(model="embedding-3", input=[question])
@@ -30,8 +34,11 @@ def ask(question, k=5):
         hits = [(1.0, c) for c in exact_hits]
         route = f"精确({len(exact_hits)}块)"
     else:
-        hits = retrieve(question, k)
-        route = "向量"
+        vec_hits = retrieve(question, 10)          # (score, chunk)，向量路扩到10做候选池
+        bm_raw = bm25_search(question, chunks, bm25, topk=10)   # 原生返回 (chunk, score)！
+        bm_hits = [(s, c) for c, s in bm_raw]      # 翻元组对齐 (score, chunk)
+        hits = rrf_fuse(vec_hits, bm_hits, topk=5) # 融合只取 top5 喂 prompt
+        route = f"RRF(向{len(vec_hits)}+BM{len(bm_hits)})"
     resp = client.chat.completions.create(model="glm-4-flash", messages=build_prompt(question, hits), temperature=0.1, max_tokens=500)
     return resp.choices[0].message.content, hits, route
 
