@@ -1,4 +1,4 @@
-import json, os, sys
+import json, os, sys, re
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "search"))
 import numpy as np
 from openai import OpenAI
@@ -25,10 +25,24 @@ def retrieve(question, k=5):
     return [(float(scores[i]), chunks[i]) for i in top]
 
 def build_prompt(question, hits):
-    ctx = "\n\n".join(f"【{c['doc_no']} {c['clause'] or '前言'}】{c['text']}" for _, c in hits)
+    ctx = "\n\n".join(f"[{i}]【{c['doc_no']} {c['clause'] or '前言'}】{c['text']}" for i, (_, c) in enumerate(hits, 1))
+    system = (
+        "你是政务政策问答助手。只依据下面的检索条款回答；"
+        "没有依据就回答'所给资料中未找到依据'，禁止编造。"
+    )
+    fmt = (
+        "输出格式（必须严格遵守）：\n"
+        "1. 先给答案，每条要点结尾标依据编号，如 [1] 或 [2][5]；无依据不标。\n"
+        "2. 答完另起一行输出【引用】，只列答案标注过的编号，每行格式：[编号] “摘录”\n"
+        "3. 摘录必须从对应编号条款原文逐字复制，禁止改写缩写，每条不超60字。\n"
+        "示例：\n"
+        "答：申请单位应当是在浙江省内注册的法人机构 [1]。\n"
+        "【引用】\n"
+        "[1] “申请单位应当是在浙江省内注册”"
+    )
     return [
-        {"role": "system", "content": "你是政务政策问答助手。只依据下面的检索条款回答；没有依据就回答'所给资料中未找到依据'，禁止编造。"},
-        {"role": "user", "content": f"检索到的条款：\n{ctx}\n\n问题：{question}"}]
+        {"role": "system", "content": system},
+        {"role": "user", "content": f"检索到的条款：\n{ctx}\n\n问题：{question}\n\n{fmt}"}]
 
 def ask(question, k=5):
     no, exact_hits = exact_search(question, chunks)
@@ -50,8 +64,29 @@ def ask(question, k=5):
         else:
             hits = fused10[:5]
 
-    resp = client.chat.completions.create(model="glm-4-flash", messages=build_prompt(question, hits), temperature=0.1, max_tokens=500)
-    return resp.choices[0].message.content, hits, route
+    resp = client.chat.completions.create(model="glm-4-flash", messages=build_prompt(question, hits), temperature=0.1, max_tokens=900)
+    ans = resp.choices[0].message.content
+    return assemble_citations(ans, hits), hits, route
+
+def assemble_citations(ans, hits):
+    out, in_cite = [], False
+    for line in ans.splitlines():
+        if "【引用】" in line:
+            in_cite = True
+            out.append(line)
+            continue
+        if in_cite:
+            m = re.match(r"\s*\[(\d+)\]\s*[“\"]?(.*?)[”\"]?\s*$", line)
+            if m:
+                n = int(m.group(1))
+                quote = re.sub(r"[；。，、！？!?.,“”\"' ]+$", "", m.group(2).strip())
+                if 1 <= n <= len(hits):
+                    _, c = hits[n - 1]
+                    out.append(f"[{n}] {c['doc_no']} | {c['clause'] or '前言'} | “{quote}”")
+            # 不匹配的行直接丢弃
+        else:
+            out.append(line)
+    return "\n".join(out)
 
 if __name__ == "__main__":
     while True:
@@ -62,4 +97,4 @@ if __name__ == "__main__":
         print("路:", route)
         for rank, (s, c) in enumerate(hits, 1):
             print(f"{rank}. [{s:.3f}] {c['doc_no']} {c['clause'] or '前言'}")
-        print(f"\n答：{ans}\n")
+        print(f"\n{ans}\n")
