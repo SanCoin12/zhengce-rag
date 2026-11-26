@@ -3,3 +3,5 @@ __pycache__/
 
 data/chroma/
 data/vec_store_v0.npz
+data/*.bak
+data/*.backup_*.json
