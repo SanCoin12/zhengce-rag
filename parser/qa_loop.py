@@ -82,7 +82,7 @@ def assemble_citations(ans, hits):
                 quote = re.sub(r"[；。，、！？!?.,“”\"' ]+$", "", m.group(2).strip())
                 if 1 <= n <= len(hits):
                     _, c = hits[n - 1]
-                    out.append(f"[{n}] {c['doc_no']} | {c['clause'] or '前言'} | “{quote}”")
+                    out.append(f"[{n}] {c['doc_no']} {c['date']} | {c['clause'] or '前言'} | “{quote}”")
             # 不匹配的行直接丢弃
         else:
             out.append(line)
